@@ -1,15 +1,17 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Callable, Optional, Union
 
+import jax
+import jax.numpy as jnp
+import optax
+import reax
 import torch
-from lightning import LightningModule
-from torchmetrics import MaxMetric, MeanMetric
-from torchmetrics.classification.accuracy import Accuracy
+from typing_extensions import override
 
 
-class MNISTLitModule(LightningModule):
-    """Example of a `LightningModule` for MNIST classification.
+class MnistModule(reax.Module):
+    """Example of a `reax.Module` for MNIST classification.
 
-    A `LightningModule` implements 8 key methods:
+    A `reax.Module` implements 8 key methods:
 
     ```python
     def __init__(self):
@@ -34,19 +36,16 @@ class MNISTLitModule(LightningModule):
     def configure_optimizers(self):
     # Define and configure optimizers and LR schedulers.
     ```
-
-    Docs:
-        https://lightning.ai/docs/pytorch/latest/common/lightning_module.html
     """
 
     def __init__(
         self,
         net: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-        scheduler: torch.optim.lr_scheduler,
+        optimizer: Callable[[...], optax.GradientTransformation],
+        scheduler: Optional[optax.Schedule],
         compile: bool,
     ) -> None:
-        """Initialize a `MNISTLitModule`.
+        """Initialize a `MnistModule`.
 
         :param net: The model to train.
         :param optimizer: The optimizer to use for training.
@@ -56,45 +55,62 @@ class MNISTLitModule(LightningModule):
 
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
-        self.save_hyperparameters(logger=False)
+        # self.save_hyperparameters(logger=False)
 
         self.net = net
+        self._optimizer: Callable[[...], optax.GradientTransformation] = optimizer
+        self._scheduler: Optional[optax.Schedule] = scheduler
+        if compile:
+            self.model_step = jax.jit(self.model_step, static_argnums=[4, 5, 6])
+        self._batch_stats: Optional[dict] = None
 
-        # loss function
-        self.criterion = torch.nn.CrossEntropyLoss()
+        self.loss_fn = optax.losses.safe_softmax_cross_entropy
 
         # metric objects for calculating and averaging accuracy across batches
-        self.train_acc = Accuracy(task="multiclass", num_classes=10)
-        self.val_acc = Accuracy(task="multiclass", num_classes=10)
-        self.test_acc = Accuracy(task="multiclass", num_classes=10)
+        self.train_acc = reax.metrics.Accuracy(mode="multiclass", num_classes=10)
+        self.val_acc = reax.metrics.Accuracy(mode="multiclass", num_classes=10)
+        self.test_acc = reax.metrics.Accuracy(mode="multiclass", num_classes=10)
 
         # for averaging loss across batches
-        self.train_loss = MeanMetric()
-        self.val_loss = MeanMetric()
-        self.test_loss = MeanMetric()
+        self.train_loss = reax.metrics.Average()
+        self.val_loss = reax.metrics.Average()
+        self.test_loss = reax.metrics.Average()
 
         # for tracking best so far validation accuracy
-        self.val_acc_best = MaxMetric()
+        self.val_acc_best = reax.metrics.Max()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    @property
+    def pytree(self) -> dict:
+        return {"params": self.parameters(), "batch_stats": self._batch_stats}
+
+    def forward(self, x: jax.Array, train: bool) -> jax.Array:
         """Perform a forward pass through the model `self.net`.
 
-        :param x: A tensor of images.
-        :return: A tensor of logits.
+        :param x: An array of images.
+        :return: An array of logits.
         """
-        return self.net(x)
+        return self._forward(self.net, self.pytree, train, x)
 
-    def on_train_start(self) -> None:
-        """Lightning hook that is called when training begins."""
-        # by default lightning executes validation step sanity checks before training starts,
-        # so it's worth to make sure validation metrics don't store results from these checks
-        self.val_loss.reset()
-        self.val_acc.reset()
-        self.val_acc_best.reset()
+    @staticmethod
+    def _forward(model, pytree, train, *args, **kwargs):
+        return model.apply(
+            pytree,
+            *args,
+            **kwargs,
+            mutable=["batch_stats"] if train else False,
+            train=train,
+        )
 
+    @staticmethod
     def model_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        params: dict,
+        batch_stats: dict,
+        x: jax.Array,
+        y: jax.Array,
+        model: Callable[[jax.Array], jax.Array],
+        loss_fn,
+        train: bool = True,
+    ) -> tuple[jax.Array, tuple[jax.Array, dict]]:
         """Perform a single model step on a batch of data.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target labels.
@@ -104,15 +120,17 @@ class MNISTLitModule(LightningModule):
             - A tensor of predictions.
             - A tensor of target labels.
         """
-        x, y = batch
-        logits = self.forward(x)
-        loss = self.criterion(logits, y)
-        preds = torch.argmax(logits, dim=1)
-        return loss, preds, y
+        pytree = {"params": params, "batch_stats": batch_stats}
+        outs = MnistModule._forward(model, pytree, train, x)
+        logits, new_batch_stats = outs if train else (outs, None)
+        loss = loss_fn(logits, y.astype(jnp.float32)).mean()
+        aux_data = logits, new_batch_stats
+        return loss, aux_data
 
+    @override
     def training_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
-    ) -> torch.Tensor:
+        self, batch: tuple[jax.Array, jax.Array], batch_idx: int
+    ) -> tuple[jax.Array, jax.Array]:
         """Perform a single training step on a batch of data from the training set.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target
@@ -120,98 +138,153 @@ class MNISTLitModule(LightningModule):
         :param batch_idx: The index of the current batch.
         :return: A tensor of losses between model predictions and targets.
         """
-        loss, preds, targets = self.model_step(batch)
+        x, targets = batch
+        val_with_grad = jax.value_and_grad(self.model_step, has_aux=True)
+        (loss, aux_data), grads = val_with_grad(
+            self.parameters(),
+            self._batch_stats,
+            x,
+            targets,
+            self.net,
+            self.loss_fn,
+            train=True,
+        )
+        logits, new_model_state = aux_data
+
+        # Update the batch stats
+        self._batch_stats = new_model_state["batch_stats"]
 
         # update and log metrics
-        self.train_loss(loss)
-        self.train_acc(preds, targets)
-        self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("train/acc", self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "train/loss",
+            self.train_loss.create(loss),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
+        self.log(
+            "train/acc",
+            self.train_acc.create(logits, jnp.argmax(targets, axis=1, keepdims=True)),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
 
         # return loss or backpropagation will fail
-        return loss
+        return loss, grads
 
-    def on_train_epoch_end(self) -> None:
-        "Lightning hook that is called when a training epoch ends."
-        pass
-
-    def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
+    @override
+    def validation_step(self, batch: tuple[jax.Array, jax.Array], batch_idx: int) -> None:
         """Perform a single validation step on a batch of data from the validation set.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target
             labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, preds, targets = self.model_step(batch)
+        x, targets = batch
+        loss, (logits, _) = self.model_step(
+            self.parameters(),
+            self._batch_stats,
+            x,
+            targets,
+            self.net,
+            self.loss_fn,
+            train=False,
+        )
 
         # update and log metrics
-        self.val_loss(loss)
-        self.val_acc(preds, targets)
-        self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "val/loss",
+            self.val_loss.create(loss),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
+        self.log(
+            "val/acc",
+            self.train_acc.create(logits, jnp.argmax(targets, axis=1, keepdims=True)),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
 
-    def on_validation_epoch_end(self) -> None:
-        "Lightning hook that is called when a validation epoch ends."
-        acc = self.val_acc.compute()  # get current val acc
-        self.val_acc_best(acc)  # update best so far val acc
-        # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
-        # otherwise metric would be reset by lightning after each epoch
-        self.log("val/acc_best", self.val_acc_best.compute(), sync_dist=True, prog_bar=True)
-
-    def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
+    def test_step(self, batch: tuple[jax.Array, jax.Array], batch_idx: int) -> None:
         """Perform a single test step on a batch of data from the test set.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target
             labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, preds, targets = self.model_step(batch)
+        x, targets = batch
+        loss, (logits, _) = self.model_step(
+            self.parameters(),
+            self._batch_stats,
+            x,
+            targets,
+            self.net,
+            self.loss_fn,
+            train=False,
+        )
 
         # update and log metrics
-        self.test_loss(loss)
-        self.test_acc(preds, targets)
-        self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("test/acc", self.test_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "test/loss",
+            self.test_loss.create(loss),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
+        self.log(
+            "test/acc",
+            self.train_acc.create(logits, jnp.argmax(targets, axis=1, keepdims=True)),
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+        )
 
-    def on_test_epoch_end(self) -> None:
-        """Lightning hook that is called when a test epoch ends."""
-        pass
-
-    def setup(self, stage: str) -> None:
-        """Lightning hook that is called at the beginning of fit (train + validate), validate,
-        test, or predict.
+    def configure_model(self, stage: str, batch, /) -> None:
+        """REAX hook that is called at the beginning of fit (train + validate), validate, test, or
+        predict.
 
         This is a good hook when you need to build models dynamically or adjust something about
         them. This hook is called on every process when using DDP.
 
         :param stage: Either `"fit"`, `"validate"`, `"test"`, or `"predict"`.
         """
-        if self.hparams.compile and stage == "fit":
-            self.net = torch.compile(self.net)
+        if self.parameters() is None:
+            images, _labels = batch
+            state = self.net.init(self.rng_key(), images)
+            params = state["params"]
+            self.set_parameters(params)
+            self._batch_stats = state["batch_stats"]
 
-    def configure_optimizers(self) -> Dict[str, Any]:
+    def configure_optimizers(self):
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
         Normally you'd need one. But in the case of GANs or similar you might have multiple.
 
-        Examples:
-            https://lightning.ai/docs/pytorch/latest/common/lightning_module.html#configure-optimizers
-
-        :return: A dict containing the configured optimizers and learning-rate schedulers to be used for training.
+        :return: A dict containing the configured optimizers and learning-rate schedulers to be
+            used for training.
         """
-        optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
-        if self.hparams.scheduler is not None:
-            scheduler = self.hparams.scheduler(optimizer=optimizer)
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": {
-                    "scheduler": scheduler,
-                    "monitor": "val/loss",
-                    "interval": "epoch",
-                    "frequency": 1,
-                },
-            }
-        return {"optimizer": optimizer}
+        if self._scheduler is None:
+            opt = self._optimizer()
+        else:
+            # Assume the scheduler can be used as a learning rate function
+            opt = self._optimizer(learning_rate=self._scheduler)
+
+        state = opt.init(self.parameters())
+        return opt, state
+
+    @override
+    def state_dict(self) -> dict[str, Any]:
+        ckpt = super().state_dict()
+        ckpt["batch_stats"] = self._batch_stats
+        return ckpt
+
+    @override
+    def load_state(self, state_dict: dict[str, Any]) -> None:
+        super().load_state(state_dict)
+        self._batch_stats = state_dict["batch_stats"]
 
 
 if __name__ == "__main__":
-    _ = MNISTLitModule(None, None, None, None)
+    _ = MnistModule(None, None, None, None)

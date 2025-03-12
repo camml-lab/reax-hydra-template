@@ -1,53 +1,45 @@
-import torch
-from torch import nn
+from flax import linen
+import jax
+import jax.numpy as jnp
 
 
-class SimpleDenseNet(nn.Module):
-    """A simple fully-connected neural net for computing predictions."""
+class SimpleDenseNet(linen.Module):
+    """A simple fully-connected neural net for computing predictions.
 
-    def __init__(
-        self,
-        input_size: int = 784,
-        lin1_size: int = 256,
-        lin2_size: int = 256,
-        lin3_size: int = 256,
-        output_size: int = 10,
-    ) -> None:
-        """Initialize a `SimpleDenseNet` module.
+    :param input_size: The number of input features.
+    :param lin1_size: The number of output features of the first linear layer.
+    :param lin2_size: The number of output features of the second linear layer.
+    :param lin3_size: The number of output features of the third linear layer.
+    :param output_size: The number of output features of the final linear layer.
+    """
 
-        :param input_size: The number of input features.
-        :param lin1_size: The number of output features of the first linear layer.
-        :param lin2_size: The number of output features of the second linear layer.
-        :param lin3_size: The number of output features of the third linear layer.
-        :param output_size: The number of output features of the final linear layer.
-        """
-        super().__init__()
+    input_size: int = 784
+    lin1_size: int = 256
+    lin2_size: int = 256
+    lin3_size: int = 256
+    output_size: int = 10
 
-        self.model = nn.Sequential(
-            nn.Linear(input_size, lin1_size),
-            nn.BatchNorm1d(lin1_size),
-            nn.ReLU(),
-            nn.Linear(lin1_size, lin2_size),
-            nn.BatchNorm1d(lin2_size),
-            nn.ReLU(),
-            nn.Linear(lin2_size, lin3_size),
-            nn.BatchNorm1d(lin3_size),
-            nn.ReLU(),
-            nn.Linear(lin3_size, output_size),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    @linen.compact
+    def __call__(self, x: jax.Array, train=True) -> jax.Array:
         """Perform a single forward pass through the network.
 
-        :param x: The input tensor.
-        :return: A tensor of predictions.
+        :param x: The input array.
+        :return: An array of predictions.
         """
-        batch_size, channels, width, height = x.size()
+        x = x.reshape((x.shape[0], -1))
 
-        # (batch, 1, width, height) -> (batch, 1*width*height)
-        x = x.view(batch_size, -1)
+        x = linen.Dense(self.lin1_size)(x)
+        x = linen.BatchNorm()(x, use_running_average=not train)
+        x = linen.relu(x)
+        x = linen.Dense(self.lin2_size)(x)
+        x = linen.BatchNorm()(x, use_running_average=not train)
+        x = linen.relu(x)
+        x = linen.Dense(self.lin3_size)(x)
+        x = linen.BatchNorm()(x, use_running_average=not train)
+        x = linen.relu(x)
+        x = linen.Dense(self.output_size)(x)
 
-        return self.model(x)
+        return x
 
 
 if __name__ == "__main__":

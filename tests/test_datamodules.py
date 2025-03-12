@@ -1,14 +1,15 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
-import torch
+import reax
 
-from src.data.mnist_datamodule import MNISTDataModule
+from src.data.mnist_datamodule import MnistDataModule
 
 
 @pytest.mark.parametrize("batch_size", [32, 128])
 def test_mnist_datamodule(batch_size: int) -> None:
-    """Tests `MNISTDataModule` to verify that it can be downloaded correctly, that the necessary
+    """Tests `MnistDataModule` to verify that it can be downloaded correctly, that the necessary
     attributes were created (e.g., the dataloader objects), and that dtypes and batch sizes
     correctly match.
 
@@ -16,14 +17,15 @@ def test_mnist_datamodule(batch_size: int) -> None:
     """
     data_dir = "data/"
 
-    dm = MNISTDataModule(data_dir=data_dir, batch_size=batch_size)
+    dm = MnistDataModule(data_dir=data_dir, batch_size=batch_size)
     dm.prepare_data()
 
     assert not dm.data_train and not dm.data_val and not dm.data_test
     assert Path(data_dir, "MNIST").exists()
     assert Path(data_dir, "MNIST", "raw").exists()
 
-    dm.setup()
+    stage = reax.stages.Train(None, None, [], reax.Generator(), datamodule=dm)
+    dm.setup(stage)
     assert dm.data_train and dm.data_val and dm.data_test
     assert dm.train_dataloader() and dm.val_dataloader() and dm.test_dataloader()
 
@@ -34,5 +36,5 @@ def test_mnist_datamodule(batch_size: int) -> None:
     x, y = batch
     assert len(x) == batch_size
     assert len(y) == batch_size
-    assert x.dtype == torch.float32
-    assert y.dtype == torch.int64
+    assert x.dtype == np.float32
+    assert y.dtype == np.int32

@@ -21,7 +21,7 @@ def test_experiments(tmp_path: Path) -> None:
         "-m",
         "experiment=glob(*)",
         "hydra.sweep.dir=" + str(tmp_path),
-        "++trainer.fast_dev_run=true",
+        "++train.fast_dev_run=true",
     ] + overrides
     run_sh_command(command)
 
@@ -38,7 +38,7 @@ def test_hydra_sweep(tmp_path: Path) -> None:
         "-m",
         "hydra.sweep.dir=" + str(tmp_path),
         "model.optimizer.lr=0.005,0.01",
-        "++trainer.fast_dev_run=true",
+        "++train.fast_dev_run=true",
     ] + overrides
 
     run_sh_command(command)
@@ -56,10 +56,10 @@ def test_hydra_sweep_ddp_sim(tmp_path: Path) -> None:
         "-m",
         "hydra.sweep.dir=" + str(tmp_path),
         "trainer=ddp_sim",
-        "trainer.max_epochs=3",
-        "+trainer.limit_train_batches=0.01",
-        "+trainer.limit_val_batches=0.1",
-        "+trainer.limit_test_batches=0.1",
+        "train.max_epochs=3",
+        "+train.limit_train_batches=0.01",
+        "+train.limit_val_batches=0.1",
+        "+test.limit_batches=0.1",
         "model.optimizer.lr=0.005,0.01,0.02",
     ] + overrides
     run_sh_command(command)

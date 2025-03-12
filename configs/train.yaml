@@ -6,7 +6,7 @@ defaults:
   - _self_
   - data: mnist
   - model: mnist
-  - callbacks: default
+  - listeners: default
   - logger: null # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
   - trainer: default
   - paths: default
@@ -36,14 +36,18 @@ task_name: "train"
 tags: ["dev"]
 
 # set False to skip model training
-train: True
+train:
+  min_epochs: 1 # prevents early stopping
+  max_epochs: 10
+  # perform a validation loop every N training epochs
+  check_val_every_n_epoch: 1
 
 # evaluate on test set, using best model weights achieved during training
-# lightning chooses best weights based on the metric specified in checkpoint callback
-test: True
+# REAX chooses best weights based on the metric specified in checkpoint callback
+test:
 
 # simply provide checkpoint path to resume training
 ckpt_path: null
 
-# seed for random number generators in pytorch, numpy and python.random
+# seed for random number generators in jax, numpy and python.random
 seed: null

@@ -5,8 +5,10 @@
 defaults:
   - default
 
-trainer:
+train:
   max_epochs: 3
   limit_train_batches: 0.01
   limit_val_batches: 0.05
-  limit_test_batches: 0.05
+
+test:
+  limit_batches: 0.05

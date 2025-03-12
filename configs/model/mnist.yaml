@@ -1,17 +1,14 @@
-_target_: src.models.mnist_module.MNISTLitModule
+_target_: src.models.mnist_module.MnistModule
 
 optimizer:
-  _target_: torch.optim.Adam
-  _partial_: true
-  lr: 0.001
-  weight_decay: 0.0
+  _partial_: True
+  _target_: optax.adam
+  learning_rate: 0.001
 
 scheduler:
-  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
-  _partial_: true
-  mode: min
-  factor: 0.1
-  patience: 10
+  _target_: optax.schedules.cosine_decay_schedule
+  init_value: 0.1
+  decay_steps: 100
 
 net:
   _target_: src.models.components.simple_dense_net.SimpleDenseNet
@@ -21,5 +18,4 @@ net:
   lin3_size: 64
   output_size: 10
 
-# compile model for faster training with pytorch 2.0
 compile: false

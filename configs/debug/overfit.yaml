@@ -5,7 +5,7 @@
 defaults:
   - default
 
-trainer:
+train:
   max_epochs: 20
   overfit_batches: 3
 

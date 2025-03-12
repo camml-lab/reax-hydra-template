@@ -1,7 +1,5 @@
-# https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.callbacks.EarlyStopping.html
-
 early_stopping:
-  _target_: lightning.pytorch.callbacks.EarlyStopping
+  _target_: reax.listeners.EarlyStopping
   monitor: ??? # quantity to be monitored, must be specified !!!
   min_delta: 0. # minimum change in the monitored quantity to qualify as an improvement
   patience: 3 # number of checks with no improvement after which training will be stopped
@@ -11,5 +9,5 @@ early_stopping:
   check_finite: True # when set True, stops training when the monitor becomes NaN or infinite
   stopping_threshold: null # stop training immediately once the monitored quantity reaches this threshold
   divergence_threshold: null # stop training as soon as the monitored quantity becomes worse than this threshold
-  check_on_train_epoch_end: null # whether to run early stopping at the end of the training epoch
+  check_on_train_epoch_end: False # whether to run early stopping at the end of the training epoch
   # log_rank_zero_only: False  # this keyword argument isn't available in stable version

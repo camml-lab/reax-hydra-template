@@ -1,23 +1,35 @@
-from typing import Any, Dict, Optional, Tuple
+import array
+import gzip
+import os
+from os import path
+import struct
+from typing import Any, Final, Optional
+import urllib.request
 
-import torch
-from lightning import LightningDataModule
-from torch.utils.data import ConcatDataset, DataLoader, Dataset, random_split
-from torchvision.datasets import MNIST
-from torchvision.transforms import transforms
+try:
+    import accimage
+except ImportError:
+    accimage = None
+import numpy as np
+import reax
+from typing_extensions import override
+
+Dataset = Any
 
 
-class MNISTDataModule(LightningDataModule):
-    """`LightningDataModule` for the MNIST dataset.
+class MnistDataModule(reax.DataModule):
+    """`REAX DataModule` for the MNIST dataset.
 
-    The MNIST database of handwritten digits has a training set of 60,000 examples, and a test set of 10,000 examples.
-    It is a subset of a larger set available from NIST. The digits have been size-normalized and centered in a
-    fixed-size image. The original black and white images from NIST were size normalized to fit in a 20x20 pixel box
-    while preserving their aspect ratio. The resulting images contain grey levels as a result of the anti-aliasing
-    technique used by the normalization algorithm. the images were centered in a 28x28 image by computing the center of
-    mass of the pixels, and translating the image so as to position this point at the center of the 28x28 field.
+    The MNIST database of handwritten digits has a training set of 60,000 examples, and a test set
+    of 10,000 examples. It is a subset of a larger set available from NIST. The digits have been
+    size-normalized and centered in a fixed-size image. The original black and white images from
+    NIST were size normalized to fit in a 20x20 pixel box while preserving their aspect ratio. The
+    resulting images contain grey levels as a result of the anti-aliasing technique used by the
+    normalization algorithm. the images were centered in a 28x28 image by computing the center of
+    mass of the pixels, and translating the image so as to position this point at the center of the
+    28x28 field.
 
-    A `LightningDataModule` implements 7 key methods:
+    A `reax.DataModule` implements 7 key methods:
 
     ```python
         def prepare_data(self):
@@ -47,43 +59,43 @@ class MNISTDataModule(LightningDataModule):
 
     This allows you to share a full dataset without explaining how to download,
     split, transform and process the data.
-
-    Read the docs:
-        https://lightning.ai/docs/pytorch/latest/data/datamodule.html
     """
+
+    mirrors = [
+        "https://ossci-datasets.s3.amazonaws.com/mnist/",
+        "https://storage.googleapis.com/cvdf-datasets/mnist/",
+        "http://yann.lecun.com/exdb/mnist/",
+    ]
 
     def __init__(
         self,
         data_dir: str = "data/",
-        train_val_test_split: Tuple[int, int, int] = (55_000, 5_000, 10_000),
+        train_val_test_split: tuple[int, int, int] = (55_000, 5_000, 10_000),
         batch_size: int = 64,
         num_workers: int = 0,
-        pin_memory: bool = False,
+        download: bool = True,
     ) -> None:
-        """Initialize a `MNISTDataModule`.
+        """Initialize a `MnistDataModule`.
 
         :param data_dir: The data directory. Defaults to `"data/"`.
         :param train_val_test_split: The train, validation and test split. Defaults to `(55_000, 5_000, 10_000)`.
         :param batch_size: The batch size. Defaults to `64`.
         :param num_workers: The number of workers. Defaults to `0`.
-        :param pin_memory: Whether to pin memory. Defaults to `False`.
         """
         super().__init__()
 
-        # this line allows to access init params with 'self.hparams' attribute
-        # also ensures init params will be stored in ckpt
-        self.save_hyperparameters(logger=False)
+        # Params
+        self._data_dir: Final[str] = data_dir
+        self._train_val_test_split: Final[tuple[int, int, int]] = train_val_test_split
+        self._batch_size: Final[int] = batch_size
+        self._num_workers: Final[int] = num_workers
+        self._download: Final[bool] = download
 
-        # data transformations
-        self.transforms = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
-        )
-
+        # State
+        self.batch_size_per_device = batch_size
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
         self.data_test: Optional[Dataset] = None
-
-        self.batch_size_per_device = batch_size
 
     @property
     def num_classes(self) -> int:
@@ -93,109 +105,134 @@ class MNISTDataModule(LightningDataModule):
         """
         return 10
 
+    @override
     def prepare_data(self) -> None:
-        """Download data if needed. Lightning ensures that `self.prepare_data()` is called only
-        within a single process on CPU, so you can safely add your downloading logic within. In
-        case of multi-node training, the execution of this hook depends upon
+        """Download data if needed. REAX ensures that `self.prepare_data()` is called only within a
+        single process on CPU, so you can safely add your downloading logic within. In case of
+        multi-node training, the execution of this hook depends upon
         `self.prepare_data_per_node()`.
 
         Do not use it to assign state (self.x = y).
         """
-        MNIST(self.hparams.data_dir, train=True, download=True)
-        MNIST(self.hparams.data_dir, train=False, download=True)
+        if self._download:
+            for filename in [
+                "train-images-idx3-ubyte.gz",
+                "train-labels-idx1-ubyte.gz",
+                "t10k-images-idx3-ubyte.gz",
+                "t10k-labels-idx1-ubyte.gz",
+            ]:
+                self._do_download(self.mirrors[0] + filename, filename)
 
-    def setup(self, stage: Optional[str] = None) -> None:
+    @override
+    def setup(self, stage: "reax.Stage", /) -> None:
         """Load data. Set variables: `self.data_train`, `self.data_val`, `self.data_test`.
 
-        This method is called by Lightning before `trainer.fit()`, `trainer.validate()`, `trainer.test()`, and
-        `trainer.predict()`, so be careful not to execute things like random split twice! Also, it is called after
-        `self.prepare_data()` and there is a barrier in between which ensures that all the processes proceed to
-        `self.setup()` once the data is prepared and available for use.
+        This method is called by REAX before `trainer.fit()`, `trainer.validate()`,
+        `trainer.test()`, and `trainer.predict()`, so be careful not to execute things like random
+        split twice! Also, it is called after `self.prepare_data()` and there is a barrier in
+        between which ensures that all the processes proceed to `self.setup()` once the data is
+        prepared and available for use.
 
-        :param stage: The stage to setup. Either `"fit"`, `"validate"`, `"test"`, or `"predict"`. Defaults to ``None``.
+        :param stage: The stage to setup. Either `"fit"`, `"validate"`, `"test"`, or `"predict"`.
+        Defaults to ``None``.
         """
-        # Divide batch size by the number of devices.
-        if self.trainer is not None:
-            if self.hparams.batch_size % self.trainer.world_size != 0:
-                raise RuntimeError(
-                    f"Batch size ({self.hparams.batch_size}) is not divisible by the number of devices ({self.trainer.world_size})."
-                )
-            self.batch_size_per_device = self.hparams.batch_size // self.trainer.world_size
+        # TOOD: Divide batch size by the number of devices.
+        # if self.trainer is not None:
+        #     if self._batch_size % self.trainer.world_size != 0:
+        #         raise RuntimeError(
+        #             f"Batch size ({self._batch_size}) is not divisible by the number of devices "
+        #             f"({self.trainer.world_size})."
+        #         )
+        #     self.batch_size_per_device = self._batch_size // self.trainer.world_size
 
         # load and split datasets only if not loaded already
         if not self.data_train and not self.data_val and not self.data_test:
-            trainset = MNIST(self.hparams.data_dir, train=True, transform=self.transforms)
-            testset = MNIST(self.hparams.data_dir, train=False, transform=self.transforms)
-            dataset = ConcatDataset(datasets=[trainset, testset])
-            self.data_train, self.data_val, self.data_test = random_split(
-                dataset=dataset,
-                lengths=self.hparams.train_val_test_split,
-                generator=torch.Generator().manual_seed(42),
+            trainset = reax.data.ArrayDataset(
+                self.parse_images(path.join(self._data_dir, "train-images-idx3-ubyte.gz")),
+                self.parse_labels(path.join(self._data_dir, "train-labels-idx1-ubyte.gz")),
             )
 
-    def train_dataloader(self) -> DataLoader[Any]:
+            testset = reax.data.ArrayDataset(
+                self.parse_images(path.join(self._data_dir, "t10k-images-idx3-ubyte.gz")),
+                self.parse_labels(path.join(self._data_dir, "t10k-labels-idx1-ubyte.gz")),
+            )
+
+            dataset = reax.data.ConcatDataset([trainset, testset])
+            self.data_train, self.data_val, self.data_test = reax.data.random_split(
+                stage.rng,
+                dataset=dataset,
+                lengths=self._train_val_test_split,
+            )
+
+    @override
+    def train_dataloader(self) -> reax.DataLoader[Any]:
         """Create and return the train dataloader.
 
         :return: The train dataloader.
         """
-        return DataLoader(
+        return reax.data.ReaxDataLoader(
             dataset=self.data_train,
             batch_size=self.batch_size_per_device,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
+            # num_workers=self._num_workers,
             shuffle=True,
         )
 
-    def val_dataloader(self) -> DataLoader[Any]:
+    @override
+    def val_dataloader(self) -> reax.DataLoader[Any]:
         """Create and return the validation dataloader.
 
         :return: The validation dataloader.
         """
-        return DataLoader(
+        return reax.data.ReaxDataLoader(
             dataset=self.data_val,
             batch_size=self.batch_size_per_device,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
+            # num_workers=self._num_workers,
             shuffle=False,
         )
 
-    def test_dataloader(self) -> DataLoader[Any]:
+    @override
+    def test_dataloader(self) -> reax.DataLoader[Any]:
         """Create and return the test dataloader.
 
         :return: The test dataloader.
         """
-        return DataLoader(
+        return reax.data.ReaxDataLoader(
             dataset=self.data_test,
             batch_size=self.batch_size_per_device,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
+            # num_workers=self._num_workers,
             shuffle=False,
         )
 
-    def teardown(self, stage: Optional[str] = None) -> None:
-        """Lightning hook for cleaning up after `trainer.fit()`, `trainer.validate()`,
-        `trainer.test()`, and `trainer.predict()`.
+    def _do_download(self, url: str, filename: str):
+        """Download the file at the URL to our data dir."""
+        if not path.exists(self._data_dir):
+            os.makedirs(self._data_dir)
 
-        :param stage: The stage being torn down. Either `"fit"`, `"validate"`, `"test"`, or `"predict"`.
-            Defaults to ``None``.
-        """
-        pass
+        out_file = path.join(self._data_dir, filename)
+        if not path.isfile(out_file):
+            urllib.request.urlretrieve(url, out_file)
+            print(f"downloaded {url} to {self._data_dir}")
 
-    def state_dict(self) -> Dict[Any, Any]:
-        """Called when saving a checkpoint. Implement to generate and save the datamodule state.
+    @staticmethod
+    def parse_labels(filename) -> np.ndarray:
+        with gzip.open(filename, "rb") as fh:
+            _ = struct.unpack(">II", fh.read(8))
+            labels = np.array(array.array("B", fh.read()), dtype=np.uint8)
 
-        :return: A dictionary containing the datamodule state that you want to save.
-        """
-        return {}
+            # Create a one-hot encoding of x of size k
+            labels = np.array(labels[:, None] == np.arange(10), dtype=np.int32)
+            return labels
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
-        """Called when loading a checkpoint. Implement to reload datamodule state given datamodule
-        `state_dict()`.
-
-        :param state_dict: The datamodule state returned by `self.state_dict()`.
-        """
-        pass
+    @staticmethod
+    def parse_images(filename) -> np.ndarray:
+        with gzip.open(filename, "rb") as fh:
+            _, num_data, rows, cols = struct.unpack(">IIII", fh.read(16))
+            img = np.array(array.array("B", fh.read()), dtype=np.uint8).reshape(
+                num_data, rows, cols
+            )
+            # Flatten all but the first dimension of an ndarray
+            return np.reshape(img, (img.shape[0], -1)) / np.float32(255.0)
 
 
 if __name__ == "__main__":
-    _ = MNISTDataModule()
+    _ = MnistDataModule()
