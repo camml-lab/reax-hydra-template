@@ -6,15 +6,15 @@
 [![hydra](https://img.shields.io/badge/Config-Hydra_1.3-89b8cd)](https://hydra.cc/)
 [![black](https://img.shields.io/badge/Code%20Style-Black-black.svg?labelColor=gray)](https://black.readthedocs.io/en/stable/)
 [![isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/) <br>
-[![tests](https://github.com/ashleve/lightning-hydra-template/actions/workflows/test.yml/badge.svg)](https://github.com/ashleve/lightning-hydra-template/actions/workflows/test.yml)
-[![code-quality](https://github.com/ashleve/lightning-hydra-template/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/ashleve/lightning-hydra-template/actions/workflows/code-quality-main.yaml)
-[![codecov](https://codecov.io/gh/ashleve/lightning-hydra-template/branch/main/graph/badge.svg)](https://codecov.io/gh/ashleve/lightning-hydra-template) <br>
-[![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/ashleve/lightning-hydra-template#license)
-[![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/ashleve/lightning-hydra-template/pulls)
-[![contributors](https://img.shields.io/github/contributors/ashleve/lightning-hydra-template.svg)](https://github.com/ashleve/lightning-hydra-template/graphs/contributors)
+[![tests](https://github.com/camml-lab/reax-hydra-template/actions/workflows/test.yml/badge.svg)](https://github.com/camml-lab/reax-hydra-template/actions/workflows/test.yml)
+[![code-quality](https://github.com/camml-lab/reax-hydra-template/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/camml-lab/reax-hydra-template/actions/workflows/code-quality-main.yaml)
+[![codecov](https://codecov.io/gh/camml-lab/reax-hydra-template/branch/main/graph/badge.svg)](https://codecov.io/gh/camml-lab/reax-hydra-template) <br>
+[![license](https://img.shields.io/badge/License-MIT-green.svg?labelColor=gray)](https://github.com/camml-lab/reax-hydra-template#license)
+[![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/camml-lab/reax-hydra-template/pulls)
+[![contributors](https://img.shields.io/github/contributors/camml-lab/reax-hydra-template.svg)](https://github.com/camml-lab/reax-hydra-template/graphs/contributors)
 
 A clean template to kickstart your deep learning project 🚀⚡🔥<br>
-Click on [<kbd>Use this template</kbd>](https://github.com/ashleve/lightning-hydra-template/generate) to initialize new
+Click on [<kbd>Use this template</kbd>](https://github.com/camml-lab/reax-hydra-template/generate) to initialize new
 repository.
 
 _Suggestions are always welcome!_
@@ -41,8 +41,8 @@ utilities.
 **Why you might not want to use it:**
 
 ❌ Things break from time to time <br>
-Lightning and Hydra are still evolving and integrate many libraries, which means sometimes things break. For the list of
-currently known problems visit [this page](https://github.com/ashleve/lightning-hydra-template/labels/bug).
+REAX and Hydra are still evolving and integrate many libraries, which means sometimes things break. For the list of
+currently known problems visit [this page](https://github.com/camml-lab/reax-hydra-template/labels/bug).
 
 ❌ Not adjusted for data engineering <br>
 Template is not really adjusted for building data pipelines that depend on each other. It's more efficient to use it for
@@ -166,7 +166,7 @@ When running `python src/train.py` you should see something like this:
 
 <div align="center">
 
-![](https://github.com/ashleve/lightning-hydra-template/blob/resources/terminal.png)
+![](https://github.com/camml-lab/reax-hydra-template/blob/resources/terminal.png)
 
 </div>
 
@@ -214,7 +214,7 @@ python train.py trainer=mps
 ```
 
 > **Warning**: Currently there are problems with DDP mode,
-> read [this issue](https://github.com/ashleve/lightning-hydra-template/issues/393) to learn more.
+> read [this issue](https://github.com/camml-lab/lightning-hydra-template/issues/393) to learn more.
 
 </details>
 
