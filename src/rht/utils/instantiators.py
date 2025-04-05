@@ -2,7 +2,7 @@ import hydra
 import omegaconf
 import reax
 
-from src.utils import pylogger
+from . import pylogger
 
 log = pylogger.RankedLogger(__name__, rank_zero_only=True)
 

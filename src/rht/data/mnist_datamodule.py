@@ -105,6 +105,10 @@ class MnistDataModule(reax.DataModule):
         """
         return 10
 
+    @property
+    def downloads_dir(self) -> str:
+        return os.path.join(self._data_dir, "MNIST", "raw")
+
     @override
     def prepare_data(self) -> None:
         """Download data if needed. REAX ensures that `self.prepare_data()` is called only within a
@@ -136,7 +140,7 @@ class MnistDataModule(reax.DataModule):
         :param stage: The stage to setup. Either `"fit"`, `"validate"`, `"test"`, or `"predict"`.
         Defaults to ``None``.
         """
-        # TOOD: Divide batch size by the number of devices.
+        # TODO: Divide batch size by the number of devices.
         # if self.trainer is not None:
         #     if self._batch_size % self.trainer.world_size != 0:
         #         raise RuntimeError(
@@ -148,13 +152,13 @@ class MnistDataModule(reax.DataModule):
         # load and split datasets only if not loaded already
         if not self.data_train and not self.data_val and not self.data_test:
             trainset = reax.data.ArrayDataset(
-                self.parse_images(path.join(self._data_dir, "train-images-idx3-ubyte.gz")),
-                self.parse_labels(path.join(self._data_dir, "train-labels-idx1-ubyte.gz")),
+                self.parse_images(path.join(self.downloads_dir, "train-images-idx3-ubyte.gz")),
+                self.parse_labels(path.join(self.downloads_dir, "train-labels-idx1-ubyte.gz")),
             )
 
             testset = reax.data.ArrayDataset(
-                self.parse_images(path.join(self._data_dir, "t10k-images-idx3-ubyte.gz")),
-                self.parse_labels(path.join(self._data_dir, "t10k-labels-idx1-ubyte.gz")),
+                self.parse_images(path.join(self.downloads_dir, "t10k-images-idx3-ubyte.gz")),
+                self.parse_labels(path.join(self.downloads_dir, "t10k-labels-idx1-ubyte.gz")),
             )
 
             dataset = reax.data.ConcatDataset([trainset, testset])
@@ -205,13 +209,14 @@ class MnistDataModule(reax.DataModule):
 
     def _do_download(self, url: str, filename: str):
         """Download the file at the URL to our data dir."""
-        if not path.exists(self._data_dir):
-            os.makedirs(self._data_dir)
+        save_dir = self.downloads_dir
+        if not path.exists(save_dir):
+            os.makedirs(save_dir)
 
-        out_file = path.join(self._data_dir, filename)
+        out_file = path.join(save_dir, filename)
         if not path.isfile(out_file):
             urllib.request.urlretrieve(url, out_file)
-            print(f"downloaded {url} to {self._data_dir}")
+            print(f"downloaded {url} to {save_dir}")
 
     @staticmethod
     def parse_labels(filename) -> np.ndarray:

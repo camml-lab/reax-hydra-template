@@ -23,20 +23,12 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # more info: https://github.com/ashleve/rootutils
 # ------------------------------------------------------------------------------------ #
 
-from src.utils import (
-    RankedLogger,
-    extras,
-    get_metric_value,
-    instantiate_listeners,
-    instantiate_loggers,
-    log_hyperparameters,
-    task_wrapper,
-)
+from . import utils
 
-log = RankedLogger(__name__, rank_zero_only=True)
+log = utils.RankedLogger(__name__, rank_zero_only=True)
 
 
-@task_wrapper
+@utils.task_wrapper
 def train(cfg: omegaconf.DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     """Trains the model. Can additionally evaluate on a testset, using best weights obtained during
     training.
@@ -58,10 +50,10 @@ def train(cfg: omegaconf.DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
     model: reax.Module = hydra.utils.instantiate(cfg.model)
 
     log.info("Instantiating listeners...")
-    listeners: list[reax.TrainerListener] = instantiate_listeners(cfg.get("listeners"))
+    listeners: list[reax.TrainerListener] = utils.instantiate_listeners(cfg.get("listeners"))
 
     log.info("Instantiating loggers...")
-    logger: list[reax.Logger] = instantiate_loggers(cfg.get("logger"))
+    logger: list[reax.Logger] = utils.instantiate_loggers(cfg.get("logger"))
 
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
     trainer: reax.Trainer = hydra.utils.instantiate(cfg.trainer, listeners=listeners, logger=logger)
@@ -77,7 +69,7 @@ def train(cfg: omegaconf.DictConfig) -> tuple[dict[str, Any], dict[str, Any]]:
 
     if logger:
         log.info("Logging hyperparameters!")
-        log_hyperparameters(object_dict)
+        utils.log_hyperparameters(object_dict)
 
     if cfg.get("train"):
         log.info("Starting training!")
@@ -120,13 +112,13 @@ def main(cfg: omegaconf.DictConfig) -> Optional[float]:
     """
     # apply extra utilities
     # (e.g. ask for tags if none are provided in cfg, print cfg tree, etc.)
-    extras(cfg)
+    utils.extras(cfg)
 
     # train the model
     metric_dict, _ = train(cfg)
 
     # safely retrieve metric value for hydra-based hyperparameter optimization
-    metric_value = get_metric_value(
+    metric_value = utils.get_metric_value(
         metric_dict=metric_dict, metric_name=cfg.get("optimized_metric")
     )
 

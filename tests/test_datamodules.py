@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import reax
 
-from src.data.mnist_datamodule import MnistDataModule
+from rht.data.mnist_datamodule import MnistDataModule
 
 
 @pytest.mark.parametrize("batch_size", [32, 128])
@@ -24,7 +24,9 @@ def test_mnist_datamodule(batch_size: int) -> None:
     assert Path(data_dir, "MNIST").exists()
     assert Path(data_dir, "MNIST", "raw").exists()
 
-    stage = reax.stages.Train(None, None, [], reax.Generator(), datamodule=dm)
+    stage = reax.stages.Train(
+        None, reax.data.create_manager(datamodule=dm), None, [], reax.Generator()
+    )
     dm.setup(stage)
     assert dm.data_train and dm.data_val and dm.data_test
     assert dm.train_dataloader() and dm.val_dataloader() and dm.test_dataloader()

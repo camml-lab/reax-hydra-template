@@ -4,7 +4,7 @@ import warnings
 
 from omegaconf import DictConfig
 
-from src.utils import pylogger, rich_utils
+from . import pylogger, rich_utils
 
 log = pylogger.RankedLogger(__name__, rank_zero_only=True)
 

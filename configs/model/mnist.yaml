@@ -1,4 +1,4 @@
-_target_: src.models.mnist_module.MnistModule
+_target_: rht.models.mnist_module.MnistModule
 
 optimizer:
   _partial_: True
@@ -11,7 +11,7 @@ scheduler:
   decay_steps: 100
 
 net:
-  _target_: src.models.components.simple_dense_net.SimpleDenseNet
+  _target_: rht.models.components.simple_dense_net.SimpleDenseNet
   input_size: 784
   lin1_size: 64
   lin2_size: 128

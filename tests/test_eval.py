@@ -5,7 +5,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, open_dict
 import pytest
 
-from src import eval, train
+from rht import eval, train
 
 
 @pytest.mark.slow
