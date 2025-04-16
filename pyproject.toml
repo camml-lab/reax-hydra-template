@@ -36,7 +36,6 @@ dependencies = [
     "pylint",
     "pytest",
     "pytest-env",
-    "rootutils",
 ]
 [project.scripts]
 train_command = "rht.train:main"

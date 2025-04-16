@@ -215,7 +215,7 @@ class MnistDataModule(reax.DataModule):
 
         out_file = path.join(save_dir, filename)
         if not path.isfile(out_file):
-            urllib.request.urlretrieve(url, out_file)
+            urllib.request.urlretrieve(url, out_file)  # nosec
             print(f"downloaded {url} to {save_dir}")
 
     @staticmethod

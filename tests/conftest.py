@@ -7,7 +7,6 @@ from hydra import compose, initialize
 from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, open_dict
 import pytest
-import rootutils
 
 
 @pytest.fixture(scope="package")
@@ -21,7 +20,7 @@ def cfg_train_global() -> DictConfig:
 
         # set defaults for all tests
         with open_dict(cfg):
-            cfg.paths.root_dir = str(rootutils.find_root(indicator=".project-root"))
+            cfg.paths.root_dir = str(Path(__file__).parent.parent)
 
             cfg.trainer.accelerator = "cpu"
             cfg.trainer.devices = 1
@@ -54,7 +53,7 @@ def cfg_eval_global() -> DictConfig:
 
         # set defaults for all tests
         with open_dict(cfg):
-            cfg.paths.root_dir = str(rootutils.find_root(indicator=".project-root"))
+            cfg.paths.root_dir = str(Path(__file__).parent.parent)
             cfg.trainer.accelerator = "cpu"
             cfg.trainer.devices = 1
 
