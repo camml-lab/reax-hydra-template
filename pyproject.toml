@@ -5,8 +5,9 @@ build-backend = 'flit_core.buildapi'
 [project]
 name = 'rht'  # Choose a name for your project
 version = "0.0.1"
+dynamic = ["description"]
 authors = [
-    { name = '', email = '' },
+    { name = 'Name', email = 'who@where.com' }, # Add your details here
 ]
 readme = 'README.md'
 license = { file = 'LICENSE.txt' }
@@ -18,6 +19,7 @@ classifiers = [
     'Programming Language :: Python :: 3.10',
     'Programming Language :: Python :: 3.11',
     'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
 ]
 keywords = ['machine learning', 'jax', 'research']
 requires-python = '>=3.9'

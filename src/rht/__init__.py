@@ -1,0 +1,1 @@
+"""REAX Hydra template."""

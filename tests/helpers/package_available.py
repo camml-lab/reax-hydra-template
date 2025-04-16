@@ -1,7 +1,7 @@
 import platform
 
-import pkg_resources
 from lightning.fabric.accelerators import TPUAccelerator
+import pkg_resources
 
 
 def _package_available(package_name: str) -> bool:

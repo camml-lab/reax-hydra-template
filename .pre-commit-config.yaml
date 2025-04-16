@@ -9,7 +9,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: fix-encoding-pragma
-        args: [ --remove ]
+        args: [--remove]
       - id: check-docstring-first
       - id: check-yaml
       - id: debug-statements
@@ -21,7 +21,7 @@ repos:
       - id: mixed-line-ending
 
   - repo: https://github.com/ikamensh/flynt/
-    rev: '1.0.1'
+    rev: "1.0.1"
     hooks:
       - id: flynt
 
@@ -37,7 +37,7 @@ repos:
       - id: flake8
 
   - repo: https://github.com/pycqa/isort
-    rev: '6.0.1'
+    rev: "6.0.1"
     hooks:
       - id: isort
 
@@ -45,8 +45,8 @@ repos:
     rev: 1.8.3
     hooks:
       - id: bandit
-        args: [ "-c", "pyproject.toml" ]
-        additional_dependencies: [ '.[toml]' ]
+        args: ["-c", "pyproject.toml"]
+        additional_dependencies: [".[toml]"]
 
   - repo: https://github.com/PyCQA/pylint
     # Configuration help can be found here:
@@ -55,12 +55,11 @@ repos:
     hooks:
       - id: pylint
         alias: pylint-with-spelling
-        stages: [ manual ]
+        stages: [manual]
         language: system
-        types: [ python ]
+        types: [python]
         require_serial: true
-        exclude:
-          (?x)^(
+        exclude: (?x)^(
           docs/.*|
           test/.*
           )$

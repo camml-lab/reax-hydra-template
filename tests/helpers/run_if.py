@@ -6,11 +6,11 @@ https://github.com/PyTorchLightning/pytorch-lightning/blob/master/tests/helpers/
 import sys
 from typing import Any, Dict, Optional
 
-import pytest
-import torch
 from packaging.version import Version
 from pkg_resources import get_distribution
+import pytest
 from pytest import MarkDecorator
+import torch
 
 from tests.helpers.package_available import (
     _COMET_AVAILABLE,
